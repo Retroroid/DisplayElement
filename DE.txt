@@ -1,0 +1,160 @@
+function DisplayElement() {
+    this.imagePath = "";
+    
+    this.parentElement = null;
+    
+    this.childElement = [];
+    
+    this.relativeAnchor = This.initializeXY();
+    
+    this.size = This.initializeXY();
+    
+    this.scale = 1;
+}
+DisplayElement.prototype.initializeXY = function(){
+    var This = this;
+    var initialXY = [];
+    
+    initialXY.push(0);
+    
+    initialXY.push(0);
+    
+    return rules.r(initialXY);
+};
+
+DisplayElement.prototype.getElementAsSVG = function(){
+    var This = this;
+    /*Convert this DisplayElement object to the equivalent SVG element text.*/
+    /*If the path is empty, then return nothing; this element's image does not exist.*/
+    if(This.imagePath == ""){
+        return rules.r("");
+    }
+    var SVGElement = "<image href=\"imageRef\" x=\"imageXPos\" y=\"imageYPos\" width=\"imageWidth\" height=\"imageHeight\" />";
+    
+    /*imageRef is the path in the media resources on KBM where this element's image is stored.*/
+    SVGElement = rules.strReplace("imageRef", This.imagePath, SVGElement);
+    
+    /*The anchor will be at its absolute XY location times the cumulative scale of all parent elements.*/
+    SVGElement = rules.strReplace("imageXPos", rules.objToString(((This.getAbsoluteAnchor())[0] * This.getAbsoluteScale() / This.scale)), SVGElement);
+    
+    SVGElement = rules.strReplace("imageYPos", rules.objToString(((This.getAbsoluteAnchor())[1] * This.getAbsoluteScale() / This.scale)), SVGElement);
+    
+    /*The size of this element is the original size, times its desired scale, times the root scale.*/
+    SVGElement = rules.strReplace("imageWidth", rules.objToString(((This.size)[0] * This.getAbsoluteScale())), SVGElement);
+    
+    SVGElement = rules.strReplace("imageHeight", rules.objToString(((This.size)[1] * This.getAbsoluteScale())), SVGElement);
+    
+    return rules.r(SVGElement);
+};
+
+DisplayElement.prototype.alignToParentEdge = function(edgeNSEW){
+    var This = this;
+    /*Sets this element to be aligned on one of its parent's edges, and sets this element's scale and position appropriately (as if the parent was at 100% scale)*/
+    if((This.parentElement == null)){
+        return rules.r(false);
+    }
+    var isHorizontal = ((edgeNSEW == "E") || (edgeNSEW == "W"));
+    
+    var isNotHorizontal = !(isHorizontal);
+    
+    /*If horizontal alignment, the heights (index 1) must be the same. If vertical, the widths (index 0) must be the same. Set the scale by finding the appropriate ratio.*/
+    This.scale = ((This.parentElement.size)[isHorizontal] / (This.size)[isHorizontal]);
+    
+    /*If horizontal, Y (index 1) relative anchor will be 0. If vertical, X (index 0) relative anchor will be 0.*/
+    This.relativeAnchor[isHorizontal] = 0;
+    
+    /*If element is placed on parent's N/W edge, other anchor is (-1)*element's height/width*new scale, resp. Otherwise, other anchor is parent's height/width, resp.*/
+    switch(edgeNSEW){
+        case ("N"):
+        case ("W"):
+        
+            This.relativeAnchor[isNotHorizontal] = ((This.size)[isNotHorizontal] * This.scale * -1);
+            
+            return rules.r(true);
+            break;
+            
+        default:
+        
+            This.relativeAnchor[isNotHorizontal] = (This.parentElement.size)[isNotHorizontal];
+            
+            return rules.r(true);
+    }
+    return rules.r(false);
+};
+
+DisplayElement.prototype.getAbsoluteScale = function(){
+    var This = this;
+    /*getAbsoluteAnchor - Get this element's absolute scale relative to all parent elements*/
+    return rules.r(This.getAbsoluteScaleSub(1));
+};
+
+DisplayElement.prototype.getAbsoluteScaleSub = function(absoluteScale){
+    var This = this;
+    absoluteScale = (absoluteScale * This.scale);
+    
+    if((This.parentElement == null)){
+        return rules.r(absoluteScale);
+    }
+    return rules.r(This.parentElement.getAbsoluteScaleSub(absoluteScale));
+};
+
+DisplayElement.prototype.getAbsoluteAnchor = function(){
+    var This = this;
+    /*getAbsoluteAnchor - Get this element's origin's anchor as absolute coordinates relative to the root element's origin.*/
+    var absoluteAnchor = This.initializeXY();
+    
+    return rules.r(This.getAbsoluteAnchorSub(absoluteAnchor));
+};
+
+DisplayElement.prototype.getAbsoluteAnchorSub = function(absoluteAnchor){
+    var This = this;
+    /*Add the current element's relative position to the absoluteAnchor running sum*/
+    absoluteAnchor[0] = ((absoluteAnchor)[0] + (This.relativeAnchor)[0]);
+    
+    absoluteAnchor[1] = ((absoluteAnchor)[1] + (This.relativeAnchor)[1]);
+    
+    /*If there is no parent element the current element is the root, and the absoluteAnchor has completed calculation.*/
+    if((This.parentElement == null)){
+        return rules.r(absoluteAnchor);
+    }
+    /*If there is a parent element, then repeat the process with that parent, until the root is found.*/
+    return rules.r(This.parentElement.getAbsoluteAnchorSub(absoluteAnchor));
+};
+
+DisplayElement.prototype.getTreeAsSVG = function(){
+    var This = this;
+    /*getTreeAsSVG - Get the entire node tree as an SVG body using breadth-first traversal*/
+    /*First create the queue for the breadth-first search and add the root node to it.*/
+    var DisplayElementQueue = [];
+    
+    DisplayElementQueue.push(This);
+    
+    /*Then, visit the remaining nodes and add them to the queue in the appropriate order, constructing the SVG text at the same time.*/
+    return rules.r(This.getTreeAsSVGSub(DisplayElementQueue, "", 0));
+};
+
+DisplayElement.prototype.getTreeAsSVGSub = function(BFSQueue, SVGText, index){
+    var This = this;
+    /*If our index exceeds the length of the queue, then we have finished iterating over the tree.*/
+    if(index >= (BFSQueue).length){
+        return rules.r(SVGText);
+    }
+    /*If it is not, then get the current element and add it to the SVGText*/
+    var currentElement = (BFSQueue)[index];
+    
+    SVGText = SVGText + currentElement.getElementAsSVG();
+    
+    /*Then, add its children to the queue*/
+    var _list1 = currentElement.childElement;
+    for(var _key1 = 0; _key1 < _list1.length; _key1++){
+        var child = _list1[_key1];
+        BFSQueue.push(child);
+    }
+    /*And move on to the next element in the queue*/
+    return rules.r(This.getTreeAsSVGSub(BFSQueue, SVGText, (index + 1)));
+};
+
+/*Clear the body and reset header. */
+var SVGBody = "";
+
+var SVGHeader = "<svg height=\"viewBoxHeight\" width=\"viewBoxWidth\">";
